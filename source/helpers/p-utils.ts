@@ -1,16 +1,12 @@
-import {IterableElement, Promisable} from 'type-fest';
+import {Promisable} from 'type-fest';
 
-export function pSomeFunction<
-	List extends Iterable<unknown>,
-	Element extends IterableElement<List>,
->(
-	iterable: List,
-	predicate: (value: Element) => Promisable<boolean>,
+export function pSomeFunction(
+	iterable: Iterable<() => Promisable<unknown>>,
 ): Promisable<boolean> {
-	const promises: Array<PromiseLike<boolean>> = [];
+	const promises: Array<Promisable<unknown>> = [];
 	// Prioritize sync functions and early returns
 	for (const item of iterable) {
-		const result = predicate(item as Element);
+		const result = item();
 		if (typeof result === 'boolean') {
 			if (result) {
 				// Early sync return on the first truthy value
@@ -29,7 +25,7 @@ export function pSomeFunction<
 	return pSome(promises);
 }
 
-async function pSome(iterable: Iterable<PromiseLike<unknown>>): Promise<boolean> {
+async function pSome(iterable: Iterable<Promisable<unknown>>): Promise<boolean> {
 	// eslint-disable-next-line no-async-promise-executor -- It's fine, resolve is at the end
 	return new Promise(async resolve => {
 		for (const promise of iterable) {
@@ -46,17 +42,13 @@ async function pSome(iterable: Iterable<PromiseLike<unknown>>): Promise<boolean>
 	});
 }
 
-export function pEveryFunction<
-	List extends Iterable<unknown>,
-	Element extends IterableElement<List>,
->(
-	iterable: List,
-	predicate: (value: Element) => Promisable<boolean>,
+export function pEveryFunction(
+	iterable: Iterable<() => Promisable<unknown>>,
 ): Promisable<boolean> {
-	const promises: Array<PromiseLike<boolean>> = [];
+	const promises: Array<Promisable<unknown>> = [];
 	// Prioritize sync functions and early returns
 	for (const item of iterable) {
-		const result = predicate(item as Element);
+		const result = item();
 		if (typeof result === 'boolean') {
 			if (!result) {
 				// Early sync return on the first falsy value
@@ -75,7 +67,37 @@ export function pEveryFunction<
 	return pEvery(promises);
 }
 
-async function pEvery(iterable: Iterable<PromiseLike<unknown>>): Promise<boolean> {
+async function pEvery(iterable: Iterable<Promisable<unknown>>): Promise<boolean> {
+	const results = await Promise.all(iterable);
+	return results.every(Boolean);
+}
+
+export function pNoneFunction(
+	iterable: Iterable<() => Promisable<unknown>>,
+): Promisable<boolean> {
+	const promises: Array<Promisable<unknown>> = [];
+	// Prioritize sync functions and early returns
+	for (const item of iterable) {
+		const result = item();
+		if (typeof result === 'boolean') {
+			if (result) {
+				// Early sync return on the first truthy value
+				return false;
+			}
+		} else {
+			promises.push(result);
+		}
+	}
+
+	if (promises.length === 0) {
+		// Matches `[].every(Boolean)`
+		return true;
+	}
+
+	return pNone(promises);
+}
+
+async function pNone(iterable: Iterable<Promisable<unknown>>): Promise<boolean> {
 	const results = await Promise.all(iterable);
 	return results.every(Boolean);
 }
